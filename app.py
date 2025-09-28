@@ -100,23 +100,41 @@ def get_reminders(user_id):
     return jsonify([serialize_doc(r) for r in reminders]), 200
 
 
-# ------------------ Care Guide ------------------
+# ------------------ Care Guide (Safe Search) ------------------
 @app.route('/search', methods=['GET'])
 def search_plants():
-    query = request.args.get('query', '')
+    query = request.args.get('query', '').strip()
     if not query:
         return jsonify([]), 200
 
-    results = care_guide_collection.find(
-        {
-            "$or": [
-                {"plant_name": {"$regex": query, "$options": "i"}},
-                {"scientific_name": {"$regex": query, "$options": "i"}}
-            ]
-        },
-        {"_id": 0}  # exclude MongoDB ID
-    )
-    return jsonify(list(results)), 200
+    try:
+        # Build a case-insensitive regex safely
+        regex_query = {"$regex": query, "$options": "i"}
+
+        # Search in plant_name and scientific_name
+        results = care_guide_collection.find(
+            {
+                "$or": [
+                    {"plant_name": regex_query},
+                    {"scientific_name": regex_query}
+                ]
+            },
+            {"_id": 0}  # exclude MongoDB ID from results
+        )
+
+        # Convert cursor to list safely
+        plant_list = list(results)
+
+        # Return empty list if nothing found
+        return jsonify(plant_list), 200
+
+    except Exception as e:
+        # Catch all errors and return JSON instead of crashing
+        return jsonify({
+            "error": "Server error occurred during search",
+            "details": str(e)
+        }), 500
+
 
 
 # ------------------ Main ------------------
