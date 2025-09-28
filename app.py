@@ -1,10 +1,10 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pymongo import MongoClient
 from bson import ObjectId
 from datetime import datetime
 import os
+import bcrypt
 
 app = Flask(__name__)
 CORS(app)
@@ -23,9 +23,19 @@ care_guide_collection = db['care_guide']
 
 # ------------------ Helper ------------------
 def serialize_doc(doc):
-    """Convert MongoDB ObjectId to string"""
-    doc['_id'] = str(doc['_id'])
+    """Convert MongoDB ObjectId and datetime to string for JSON"""
+    doc = dict(doc)  # make a copy
+    if '_id' in doc:
+        doc['_id'] = str(doc['_id'])
+    if 'created_at' in doc and isinstance(doc['created_at'], datetime):
+        doc['created_at'] = doc['created_at'].isoformat()
     return doc
+
+
+# ------------------ Home Route ------------------
+@app.route('/')
+def home():
+    return "Welcome to GreenBuddy API!"
 
 
 # ------------------ User Routes ------------------
@@ -39,6 +49,9 @@ def register_user():
     if existing:
         return jsonify({"error": "User already exists"}), 400
 
+    # Hash password before storing
+    hashed_pw = bcrypt.hashpw(data["password"].encode('utf-8'), bcrypt.gensalt())
+    data["password"] = hashed_pw
     users_collection.insert_one(data)
     return jsonify({"message": "User registered successfully"}), 201
 
@@ -46,8 +59,8 @@ def register_user():
 @app.route('/login', methods=['POST'])
 def login_user():
     data = request.json
-    user = users_collection.find_one({"email": data["email"], "password": data["password"]})
-    if not user:
+    user = users_collection.find_one({"email": data.get("email")})
+    if not user or not bcrypt.checkpw(data.get("password", "").encode('utf-8'), user['password']):
         return jsonify({"error": "Invalid credentials"}), 401
     return jsonify({"message": "Login successful", "user": serialize_doc(user)}), 200
 
@@ -94,7 +107,6 @@ def search_plants():
     if not query:
         return jsonify([]), 200
 
-    # Search in both plant_name and scientific_name
     results = care_guide_collection.find(
         {
             "$or": [
@@ -109,5 +121,4 @@ def search_plants():
 
 # ------------------ Main ------------------
 if __name__ == '__main__':
-    app.run(debug=True)
-
+    app.run(host='0.0.0.0', port=int(os.getenv("PORT", 5000)), debug=True)
