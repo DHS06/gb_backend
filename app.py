@@ -65,21 +65,79 @@ def login_user():
     return jsonify({"message": "Login successful", "user": serialize_doc(user)}), 200
 
 
-# ------------------ User Plants ------------------
-@app.route('/add_plant', methods=['POST'])
+# ------------------ User Plants (My Garden) ------------------
+
+#  Add new plant
+@app.route('/garden/add', methods=['POST'])
 def add_plant():
-    data = request.json
-    if not data.get("user_id") or not data.get("plant_name"):
-        return jsonify({"error": "user_id and plant_name required"}), 400
+    try:
+        data = request.json
+        required_fields = ["user_id", "plant_name", "plant_type", "date_acquired", "watering_frequency"]
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"error": f"{field} is required"}), 400
 
-    user_plants_collection.insert_one(data)
-    return jsonify({"message": "Plant added successfully"}), 201
+        plant = {
+            "user_id": data["user_id"],
+            "photo_url": data.get("photo_url", ""),  # optional
+            "plant_name": data["plant_name"],
+            "plant_type": data["plant_type"],  # dropdown (indoor/outdoor/flower)
+            "date_acquired": data["date_acquired"],  # store as string (YYYY-MM-DD)
+            "watering_frequency": data["watering_frequency"],  # dropdown
+            "soil_type": data.get("soil_type", ""),
+            "pot_type": data.get("pot_type", ""),
+            "pot_size": data.get("pot_size", ""),
+            "care_notes": data.get("care_notes", "")
+        }
+
+        result = user_plants_collection.insert_one(plant)
+        return jsonify({"message": "Plant added successfully", "id": str(result.inserted_id)}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
-@app.route('/my_garden/<user_id>', methods=['GET'])
-def get_my_garden(user_id):
-    plants = user_plants_collection.find({"user_id": user_id})
-    return jsonify([serialize_doc(p) for p in plants]), 200
+#  Get all plants in user's garden
+@app.route('/garden/<user_id>', methods=['GET'])
+def get_garden(user_id):
+    try:
+        plants = list(user_plants_collection.find({"user_id": user_id}))
+        for plant in plants:
+            plant["_id"] = str(plant["_id"])
+        return jsonify(plants), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+#  Remove a plant
+@app.route('/garden/delete/<plant_id>', methods=['DELETE'])
+def delete_plant(plant_id):
+    try:
+        result = user_plants_collection.delete_one({"_id": ObjectId(plant_id)})
+        if result.deleted_count == 1:
+            return jsonify({"message": "Plant deleted successfully"}), 200
+        else:
+            return jsonify({"error": "Plant not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+#  Update plant details (optional if user edits later)
+@app.route('/garden/update/<plant_id>', methods=['PUT'])
+def update_plant(plant_id):
+    try:
+        data = request.json
+        update_data = {k: v for k, v in data.items() if v is not None}
+
+        result = user_plants_collection.update_one(
+            {"_id": ObjectId(plant_id)},
+            {"$set": update_data}
+        )
+        if result.matched_count == 0:
+            return jsonify({"error": "Plant not found"}), 404
+        return jsonify({"message": "Plant updated successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 
 # ------------------ Reminders ------------------
