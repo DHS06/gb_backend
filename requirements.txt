@@ -1,6 +1,6 @@
-flask
-flask-cors
-pymongo
-python-dotenv
-gunicorn
-bcrypt
+Flask==3.0.3
+flask-cors==4.0.0
+pymongo==4.7.1
+python-dotenv==1.0.1
+gunicorn==21.2.0
+bcrypt==4.1.2
