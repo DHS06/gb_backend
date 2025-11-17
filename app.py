@@ -125,87 +125,120 @@ def create_user_profile():
         return jsonify({"error": str(e)}), 500
 
 
+# Allowed care categories
+SUPPORTED_TYPES = {
+    "indoor": "Indoor",
+    "outdoor": "Outdoor",
+    "flower": "Flower",
+    "vegetable": "Vegetable",
+    "herbs": "Herbs",
+    "cactus": "Cactus"
+}
+
+# --- Utility: Normalize plant type ---
+def normalize_type(text):
+    """Cleans and normalizes text for flexible matching"""
+    if not text:
+        return None
+
+    text = text.lower()
+
+    # Remove emojis & non-letters
+    text = resolve_type.sub(r'[^a-z]', ' ', text)
+
+    # Remove extra spaces
+    text = " ".join(text.split())
+
+    # Remove plural forms (plants → plant)
+    if text.endswith("s"):
+        text = text[:-1]
+
+    return text
+
+
+# --- Utility: Resolve best match type ---
+def resolve_type(raw_text):
+    cleaned = normalize_type(raw_text)
+
+    if not cleaned:
+        return None
+
+    # Try exact keys
+    for key in SUPPORTED_TYPES.keys():
+        if cleaned == key:
+            return SUPPORTED_TYPES[key]
+
+    # Try partial matches
+    for key in SUPPORTED_TYPES.keys():
+        if key in cleaned:
+            return SUPPORTED_TYPES[key]
+
+    return None
+
+
+# ================================
+#       ROUTE: ADD PLANT
+# ================================
 @app.route("/add_plant", methods=["POST"])
 def add_plant():
     try:
-        firebase_uid = request.form.get("uid")
+        # ---- Get form fields exactly like Flutter sends ----
+        user_id = request.form.get("uid")
         plant_name = request.form.get("plantName")
-        plant_type = request.form.get("plantType")
-        last_watered_date_str = request.form.get("lastWateredDate")
-        last_fertilized_date_str = request.form.get("lastFertilizedDate")
-        last_rePotted_date_str = request.form.get("lastRepottedDate")
+        plant_type = request.form.get("plantType")  # Outdoor, Flower, Vegetable, Herbs, Cactus
+        
+        last_watered = request.form.get("lastWateredDate")
+        last_fertilized = request.form.get("lastFertilizedDate")
+        last_repotted = request.form.get("lastRepottedDate")
 
-        care_guide_id = None
-        if plant_name:
-            care_guide_document = care_guide_collection.find_one({
-                "plant_name": {"$regex": f"^{plant_name.strip()}$", "$options": "i"}
-            })
-            if care_guide_document:
-                care_guide_id = care_guide_document["_id"]
+        # ---- Validate required fields ----
+        if not user_id or not plant_name or not plant_type:
+            return jsonify({"status": "error", "message": "Missing required fields."}), 400
 
-        if not all([firebase_uid, plant_name, plant_type, last_watered_date_str, last_fertilized_date_str, last_rePotted_date_str]):
-            return jsonify({"status": "error", "message": "Missing required fields"}), 400
+        # ---- Fetch care rules (case-insensitive) ----
+        rules = plant_care_rules_collection.find_one(
+            {"plantType": {"$regex": f"^{plant_type}$", "$options": "i"}}
+        )
 
-        full_image_url = None
-        if "plantImage" in request.files:
-            file = request.files["plantImage"]
-            if file and file.filename:
-                if cloud_name and cloud_api_key and cloud_api_secret:
-                    upload_result = cloudinary.uploader.upload(file)
-                    full_image_url = upload_result.get("secure_url")
-                else:
-                    logger.warning("Skipping Cloudinary upload because credentials are missing.")
-
-        rules = plant_care_rules_collection.find_one({"plantType": plant_type})
         if not rules:
-            return jsonify({"status": "error", "message": f"Care rules for plant type '{plant_type}' not found."}), 404
+            return jsonify({
+                "status": "error",
+                "message": f"Care rules for plant type '{plant_type}' not found."
+            }), 404
 
-        watering_freq_days = rules.get("wateringFrequencyDays", 7)
-        fertilizing_freq_days = rules.get("fertilizingFrequencyDays", 30)
-        repotting_freq_months = rules.get("repottingFrequencyMonths", 12)
+        # ---- Handle Image Upload ----
+        image_url = None
+        if "plantImage" in request.files:
+            image = request.files["plantImage"]
+            filename = secure_filename(image.filename)
+            path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            image.save(path)
+            image_url = f"/{path}"
 
-        last_watered_date_obj = datetime.fromisoformat(last_watered_date_str.replace("Z", "+00:00"))
-        last_fertilized_date_obj = datetime.fromisoformat(last_fertilized_date_str.replace("Z", "+00:00"))
-        last_rePotted_date_obj = datetime.fromisoformat(last_rePotted_date_str.replace("Z", "+00:00"))
-
-        date_acquired_str = request.form.get("dateAcquired")
-        date_acquired_obj = None
-        if date_acquired_str:
-            date_acquired_obj = datetime.fromisoformat(date_acquired_str.replace("Z", "+00:00"))
-
-        next_watering_date = last_watered_date_obj + timedelta(days=watering_freq_days)
-        next_fertilizing_date = last_fertilized_date_obj + timedelta(days=fertilizing_freq_days)
-        next_repotting_date = last_rePotted_date_obj + relativedelta(months=repotting_freq_months)
-
-        plant_data = {
-            "uid": firebase_uid,
+        # ---- Insert Into Database ----
+        plant = {
+            "userId": user_id,
             "plantName": plant_name,
             "plantType": plant_type,
-            "dateAcquired": date_acquired_obj,
-            "soilType": request.form.get("soilType"),
-            "potType": request.form.get("potType"),
-            "potSize": request.form.get("potSize"),
-            "careNotes": request.form.get("careNotes"),
-            "photo_url": full_image_url,
-            "lastWateredDate": last_watered_date_obj,
-            "lastFertilizedDate": last_fertilized_date_obj,
-            "lastRepottedDate": last_rePotted_date_obj,
-            "nextWateringDate": next_watering_date,
-            "nextFertilizingDate": next_fertilizing_date,
-            "nextRepottingDate": next_repotting_date,
-            "care_guide_id": care_guide_id
-        }
+            "imageUrl": image_url,
+            "lastWateredDate": last_watered,
+            "lastFertilizedDate": last_fertilized,
+            "lastRepottedDate": last_repotted,
+            "wateringFrequencyDays": rules.get("wateringFrequencyDays"),
+            "fertilizingFrequencyDays": rules.get("fertilizingFrequencyDays"),
+            "repottingFrequencyMonths": rules.get("repottingFrequencyMonths"),
+            "sunlightNeeds": rules.get("sunlightNeeds", ""),
+            "createdAt": datetime.utcnow()
+        }   
 
-        result = plant_collection.insert_one(plant_data)
-        plant_data["_id"] = result.inserted_id
-        serialized_plant = serialize_plant_doc(plant_data)
 
-        return jsonify({"status": "success", "message": "Plant added successfully!", "plant": serialized_plant}), 201
+        result = plant_collection.insert_one(plant)
+        plant["_id"] = str(result.inserted_id)
+
+        return jsonify({"status": "success", "message": "Plant added successfully!", "data": plant}), 201
 
     except Exception as e:
-        logger.exception("Error in add_plant")
-        return jsonify({"status": "error", "message": "An internal server error occurred", "details": str(e)}), 500
-
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/garden/<uid>", methods=["GET"])
 def get_garden(uid):
