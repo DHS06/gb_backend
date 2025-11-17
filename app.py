@@ -185,15 +185,27 @@ def add_plant():
         # ---- Get form fields exactly like Flutter sends ----
         user_id = request.form.get("uid")
         plant_name = request.form.get("plantName")
-        plant_type = request.form.get("plantType")  # Outdoor, Flower, Vegetable, Herbs, Cactus
+        
+        raw_type = request.form.get("plantType")  # value from Flutter
+        plant_type = resolve_type(raw_type)       # normalize and clean type
         
         last_watered = request.form.get("lastWateredDate")
         last_fertilized = request.form.get("lastFertilizedDate")
         last_repotted = request.form.get("lastRepottedDate")
 
         # ---- Validate required fields ----
-        if not user_id or not plant_name or not plant_type:
+        if not user_id or not plant_name or not raw_type:
             return jsonify({"status": "error", "message": "Missing required fields."}), 400
+
+        # ---- Validate resolved plant type ----
+        if not plant_type:
+            return jsonify({
+                "status": "error",
+                "message": f"Unsupported or unknown plant type '{raw_type}'"
+            }), 400
+
+        print("🌱 RAW TYPE:", raw_type)
+        print("🌿 RESOLVED TYPE:", plant_type)
 
         # ---- Fetch care rules (case-insensitive) ----
         rules = plant_care_rules_collection.find_one(
@@ -229,8 +241,7 @@ def add_plant():
             "repottingFrequencyMonths": rules.get("repottingFrequencyMonths"),
             "sunlightNeeds": rules.get("sunlightNeeds", ""),
             "createdAt": datetime.utcnow()
-        }   
-
+        }
 
         result = plant_collection.insert_one(plant)
         plant["_id"] = str(result.inserted_id)
@@ -238,7 +249,9 @@ def add_plant():
         return jsonify({"status": "success", "message": "Plant added successfully!", "data": plant}), 201
 
     except Exception as e:
+        print("❌ ERROR ADDING PLANT:", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route("/garden/<uid>", methods=["GET"])
 def get_garden(uid):
