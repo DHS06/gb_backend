@@ -143,18 +143,20 @@ def normalize_type(text):
         return None
 
     text = text.lower()
+    text = re.sub(r'[^a-z\s]', ' ', text)      # keep letters + space
+    text = " ".join(text.split())              # remove extra spaces
 
-    # Remove emojis & non-letters
-    text = re.sub(r'[^a-z]', ' ', text)
+    # Handle plural only if possible
+    words = text.split()
+    singular_words = []
+    for w in words:
+        # example: 'plants' -> 'plant' only if both exist in supported keys
+        if w.endswith("s") and w[:-1] in SUPPORTED_TYPES.keys():
+            w = w[:-1]
+        singular_words.append(w)
 
-    # Remove extra spaces
-    text = " ".join(text.split())
+    return " ".join(singular_words)
 
-    # Remove plural forms (plants → plant)
-    if text.endswith("s"):
-        text = text[:-1]
-
-    return text
 
 
 # --- Utility: Resolve best match type ---
