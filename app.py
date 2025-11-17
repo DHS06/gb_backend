@@ -1,6 +1,7 @@
 # app.py
 import os
 import sys
+import re
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
 from dotenv import load_dotenv
@@ -144,7 +145,7 @@ def normalize_type(text):
     text = text.lower()
 
     # Remove emojis & non-letters
-    text = resolve_type.sub(r'[^a-z]', ' ', text)
+    text = re.sub(r'[^a-z]', ' ', text)
 
     # Remove extra spaces
     text = " ".join(text.split())
