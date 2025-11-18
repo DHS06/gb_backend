@@ -1,10 +1,9 @@
-MONGO_URI=mongodb+srv://gb_admin:7cJvfs9L46.jfqk@cluster0.mongodb.net/?retryWrites=true&w=majority
-MONGO_DB_NAME=GreenBuddy
+MONGO_URI=mongodb+srv://gb_admin:7cJvfs9L46.jfqk@gb-cluster.drnueyi.mongodb.net/GreenBuddyDB?retryWrites=true&w=majority&appName=GB-cluster
+MONGO_DB_NAME=GreenBuddyDB
 
-CLOUDINARY_CLOUD_NAME=dlehpfzfd
-CLOUDINARY_API_KEY=614346338874279
-CLOUDINARY_API_SECRET=fHRiezboavzEwrHyavhwd3K_fy0
-
+CLOUDINARY_API_KEY=your_key
+CLOUDINARY_API_SECRET=your_secret
+CLOUDINARY_CLOUD_NAME=your_cloud_name
 
 
 
