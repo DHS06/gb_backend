@@ -166,7 +166,9 @@ def add_plant():
        
         
         
-        rules = plant_care_rules_collection.find_one({"plantType": plant_type}) 
+        rules = plant_care_rules_collection.find_one({
+        "plantType": {"$regex": f"^{plant_type.strip()}$", "$options": "i"} 
+        })
 
         if not rules:
             return jsonify({"status": "error", "message": f"Care rules for plant type '{plant_type}' not found."}), 404
