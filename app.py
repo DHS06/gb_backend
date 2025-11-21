@@ -665,41 +665,95 @@ def get_care_guide_details(guide_id):
 
 @app.route("/care_guide/add", methods=["POST"])
 def add_care_guide():
+    """
+    Add a new plant care guide to the community database
+    """
     try:
-        data = request.get_json()
-
-        required_fields = [
-            "plantName",
-            "wateringSchedule",
-            "sunlightNeeds",
-            "soilType",
-            "fertilizerTips"
-        ]
-
-        # Validation
-        for field in required_fields:
-            if field not in data or not data[field]:
-                return jsonify({"status": "error", "message": f"{field} is required"}), 400
-
-        new_guide = {
-            "plantName": data["plantName"],
-            "scientificName": data.get("scientificName", ""),
-            "wateringSchedule": data["wateringSchedule"],
-            "sunlightNeeds": data["sunlightNeeds"],
-            "soilType": data["soilType"],
-            "fertilizerTips": data["fertilizerTips"],
-            "createdAt": datetime.utcnow(),
+        # Get form data
+        plant_name = request.form.get("plant_name")
+        scientific_name = request.form.get("scientific_name", "")
+        watering_schedule = request.form.get("watering_schedule")
+        sunlight_needs = request.form.get("sunlight_needs")
+        soil_type = request.form.get("soil_type")
+        fertilizer_tips = request.form.get("fertilizer_tips")
+        
+        logger.info(f"Received care guide request for: {plant_name}")
+        
+        # Validate required fields
+        if not all([plant_name, watering_schedule, sunlight_needs, soil_type, fertilizer_tips]):
+            missing = []
+            if not plant_name: missing.append("plant_name")
+            if not watering_schedule: missing.append("watering_schedule")
+            if not sunlight_needs: missing.append("sunlight_needs")
+            if not soil_type: missing.append("soil_type")
+            if not fertilizer_tips: missing.append("fertilizer_tips")
+            
+            return jsonify({
+                "error": "Missing required fields",
+                "missing_fields": missing
+            }), 400
+        
+        # Handle image upload
+        image_url = None
+        if "image" in request.files:
+            file = request.files["image"]
+            if file and file.filename:
+                if cloud_name and cloud_api_key and cloud_api_secret:
+                    try:
+                        upload_result = cloudinary.uploader.upload(file)
+                        image_url = upload_result.get("secure_url")
+                        logger.info(f"Image uploaded successfully: {image_url}")
+                    except Exception as upload_error:
+                        logger.error(f"Cloudinary upload failed: {upload_error}")
+                        return jsonify({"error": "Image upload failed"}), 500
+                else:
+                    logger.warning("Cloudinary credentials missing")
+                    return jsonify({"error": "Image upload not configured"}), 500
+        else:
+            return jsonify({"error": "Image is required"}), 400
+        
+        # Check if plant already exists in care guide
+        existing = care_guide_collection.find_one({
+            "plant_name": {"$regex": f"^{plant_name.strip()}$", "$options": "i"}
+        })
+        
+        if existing:
+            return jsonify({
+                "error": f"Care guide for '{plant_name}' already exists in database"
+            }), 409
+        
+        # Create care guide document
+        care_guide_data = {
+            "plant_name": plant_name.strip(),
+            "scientific_name": scientific_name.strip(),
+            "watering_schedule": watering_schedule.strip(),
+            "sunlight_needs": sunlight_needs.strip(),
+            "soil_type": soil_type.strip(),
+            "fertilizer_tips": fertilizer_tips.strip(),
+            "image_url": image_url,
+            "created_at": datetime.utcnow(),
+            "status": "active"
         }
-
-        result = care_guide_collection.insert_one(new_guide)
-
+        
+        # Insert into database
+        result = care_guide_collection.insert_one(care_guide_data)
+        logger.info(f"Care guide added: {plant_name} (ID: {result.inserted_id})")
+        
         return jsonify({
             "status": "success",
             "message": "Care guide added successfully",
+            "plant_name": plant_name,
             "id": str(result.inserted_id)
         }), 201
-
+        
     except Exception as e:
-        print(f"Error adding care guide: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        logger.exception("Error in add_care_guide")
+        return jsonify({
+            "status": "error",
+            "error": "Internal server error",
+            "details": str(e)
+        }), 500
 
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
