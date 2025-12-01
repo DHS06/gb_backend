@@ -1,73 +1,51 @@
-# app.py
 import os
-import sys
-import re
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from pymongo import MongoClient
 from dotenv import load_dotenv
-from werkzeug.utils import secure_filename
-from flask_cors import CORS
+from werkzeug.utils import secure_filename #for safe file names
+from flask_cors import CORS 
 from bson import ObjectId
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import cloudinary
 import cloudinary.uploader
-import logging
 
 
-#  load .env for local development
+#load environment variables( for local testing)
 load_dotenv()
 
-# configure logging so Render logs show clear errors
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-app = Flask(__name__)
+app = Flask(_name_)
 CORS(app)
 
 #configure cloudinary
 
-cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
-cloud_api_key = os.getenv("CLOUDINARY_API_KEY")
-cloud_api_secret = os.getenv("CLOUDINARY_API_SECRET")
-
-if cloud_name and cloud_api_key and cloud_api_secret:
-    cloudinary.config(
-        cloud_name=cloud_name,
-        api_key=cloud_api_key,
-        api_secret=cloud_api_secret
-    )
-    logger.info("Cloudinary configured.")
-else:
-    logger.warning("Cloudinary environment variables missing or incomplete. Image uploads will fail.")
+cloudinary.config( 
+  cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"), 
+  api_key = os.getenv("CLOUDINARY_API_KEY"), 
+  api_secret = os.getenv("CLOUDINARY_API_SECRET") 
+)
 
 
 #db connection
-
-MONGO_URI = os.getenv("MONGO_URI")
-MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "GreenBuddyDB")
-
+MONGO_URI = os.getenv('MONGO_URI')
 if not MONGO_URI:
-    logger.error("MONGO_URI environment variable not set. Set it to your Atlas connection string.")
+    
+    raise RuntimeError("MONGO_URI environment variable not set!")
 
-try:
-    # Recommended options for Atlas (pymongo will parse mongodb+srv URIs)
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)
-    # Force a small server selection to surface connection errors early
-    client.server_info()
-    db = client[MONGO_DB_NAME]
-    logger.info(f"Connected to MongoDB database: {MONGO_DB_NAME}")
-except Exception as e:
-    logger.exception("Failed to connect to MongoDB. Check MONGO_URI, network access, and Atlas user/whitelist.")
-    raise
+client = MongoClient(MONGO_URI)
+db = client['GreenBuddyDB']
 
+users_collection = db['users']
 
-# ---------- Collections ----------
-users_collection = db["users"]
-plant_collection = db["plants"]
-plant_care_rules_collection = db["plant_care_rules"]
-reminders_collection = db["reminders"]
-care_guide_collection = db["care_guide_data"]
+#for add_new_plant screen
+plant_collection = db['plants']
+
+plant_care_rules_collection = db['plant_care_rules']
+
+ #set new reminder
+reminders_collection = db['reminders']
+
+care_guide_collection = db['care_guide_data']
 
 
 def serialize_plant_doc(plant):
@@ -373,8 +351,6 @@ def update_plant(plant_id):
         
 
         plant_type = request.form.get('plantType')
-        print("⬅️ Received plantType from request:", plant_type)
-
         last_watered_date_str = request.form.get('lastWateredDate')
         last_fertilized_date_str = request.form.get('lastFertilizedDate')
         last_rePotted_date_str = request.form.get('lastRepottedDate')
@@ -385,9 +361,7 @@ def update_plant(plant_id):
             return jsonify({"status": "error", "message": "Missing required fields (plantName, plantType, lastWateredDate)"}), 400
 
         
-        rules = plant_care_rules_collection.find_one({
-        "plantType": {"$regex": f"^{plant_type.strip()}$", "$options": "i"} 
-        })
+        rules = plant_care_rules_collection.find_one({"plantType": plant_type})
         if not rules:
             return jsonify({"status": "error", "message": f"Care rules for plant type '{plant_type}' not found."}), 404
 
@@ -662,98 +636,3 @@ def get_care_guide_details(guide_id):
     except Exception as e:
         print(f"Error in get_care_guide_details: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
-    
-@app.route("/care_guide/add", methods=["POST"])
-def add_care_guide():
-    """
-    Add a new plant care guide to the community database
-    """
-    try:
-        # Get form data
-        plant_name = request.form.get("plant_name")
-        scientific_name = request.form.get("scientific_name", "")
-        watering_schedule = request.form.get("watering_schedule")
-        sunlight_needs = request.form.get("sunlight_needs")
-        soil_type = request.form.get("soil_type")
-        fertilizer_tips = request.form.get("fertilizer_tips")
-        
-        logger.info(f"Received care guide request for: {plant_name}")
-        
-        # Validate required fields
-        if not all([plant_name, watering_schedule, sunlight_needs, soil_type, fertilizer_tips]):
-            missing = []
-            if not plant_name: missing.append("plant_name")
-            if not watering_schedule: missing.append("watering_schedule")
-            if not sunlight_needs: missing.append("sunlight_needs")
-            if not soil_type: missing.append("soil_type")
-            if not fertilizer_tips: missing.append("fertilizer_tips")
-            
-            return jsonify({
-                "error": "Missing required fields",
-                "missing_fields": missing
-            }), 400
-        
-        # Handle image upload
-        image_url = None
-        if "image" in request.files:
-            file = request.files["image"]
-            if file and file.filename:
-                if cloud_name and cloud_api_key and cloud_api_secret:
-                    try:
-                        upload_result = cloudinary.uploader.upload(file)
-                        image_url = upload_result.get("secure_url")
-                        logger.info(f"Image uploaded successfully: {image_url}")
-                    except Exception as upload_error:
-                        logger.error(f"Cloudinary upload failed: {upload_error}")
-                        return jsonify({"error": "Image upload failed"}), 500
-                else:
-                    logger.warning("Cloudinary credentials missing")
-                    return jsonify({"error": "Image upload not configured"}), 500
-        else:
-            return jsonify({"error": "Image is required"}), 400
-        
-        # Check if plant already exists in care guide
-        existing = care_guide_collection.find_one({
-            "plant_name": {"$regex": f"^{plant_name.strip()}$", "$options": "i"}
-        })
-        
-        if existing:
-            return jsonify({
-                "error": f"Care guide for '{plant_name}' already exists in database"
-            }), 409
-        
-        # Create care guide document
-        care_guide_data = {
-            "plant_name": plant_name.strip(),
-            "scientific_name": scientific_name.strip(),
-            "watering_schedule": watering_schedule.strip(),
-            "sunlight_needs": sunlight_needs.strip(),
-            "soil_type": soil_type.strip(),
-            "fertilizer_tips": fertilizer_tips.strip(),
-            "image_url": image_url,
-            "created_at": datetime.utcnow(),
-            "status": "active"
-        }
-        
-        # Insert into database
-        result = care_guide_collection.insert_one(care_guide_data)
-        logger.info(f"Care guide added: {plant_name} (ID: {result.inserted_id})")
-        
-        return jsonify({
-            "status": "success",
-            "message": "Care guide added successfully",
-            "plant_name": plant_name,
-            "id": str(result.inserted_id)
-        }), 201
-        
-    except Exception as e:
-        logger.exception("Error in add_care_guide")
-        return jsonify({
-            "status": "error",
-            "error": "Internal server error",
-            "details": str(e)
-        }), 500
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
