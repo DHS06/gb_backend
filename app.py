@@ -1,51 +1,73 @@
+# app.py
 import os
-from flask import Flask, request, jsonify, send_from_directory
+import sys
+import re
+from flask import Flask, request, jsonify
 from pymongo import MongoClient
 from dotenv import load_dotenv
-from werkzeug.utils import secure_filename #for safe file names
-from flask_cors import CORS 
+from werkzeug.utils import secure_filename
+from flask_cors import CORS
 from bson import ObjectId
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import cloudinary
 import cloudinary.uploader
+import logging
 
 
-#load environment variables( for local testing)
+#  load .env for local development
 load_dotenv()
 
-app = Flask(_name_)
+# configure logging so Render logs show clear errors
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = Flask(__name__)
 CORS(app)
 
 #configure cloudinary
 
-cloudinary.config( 
-  cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"), 
-  api_key = os.getenv("CLOUDINARY_API_KEY"), 
-  api_secret = os.getenv("CLOUDINARY_API_SECRET") 
-)
+cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
+cloud_api_key = os.getenv("CLOUDINARY_API_KEY")
+cloud_api_secret = os.getenv("CLOUDINARY_API_SECRET")
+
+if cloud_name and cloud_api_key and cloud_api_secret:
+    cloudinary.config(
+        cloud_name=cloud_name,
+        api_key=cloud_api_key,
+        api_secret=cloud_api_secret
+    )
+    logger.info("Cloudinary configured.")
+else:
+    logger.warning("Cloudinary environment variables missing or incomplete. Image uploads will fail.")
 
 
 #db connection
-MONGO_URI = os.getenv('MONGO_URI')
+
+MONGO_URI = os.getenv("MONGO_URI")
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "GreenBuddyDB")
+
 if not MONGO_URI:
-    
-    raise RuntimeError("MONGO_URI environment variable not set!")
+    logger.error("MONGO_URI environment variable not set. Set it to your Atlas connection string.")
 
-client = MongoClient(MONGO_URI)
-db = client['GreenBuddyDB']
+try:
+    # Recommended options for Atlas (pymongo will parse mongodb+srv URIs)
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=10000)
+    # Force a small server selection to surface connection errors early
+    client.server_info()
+    db = client[MONGO_DB_NAME]
+    logger.info(f"Connected to MongoDB database: {MONGO_DB_NAME}")
+except Exception as e:
+    logger.exception("Failed to connect to MongoDB. Check MONGO_URI, network access, and Atlas user/whitelist.")
+    raise
 
-users_collection = db['users']
 
-#for add_new_plant screen
-plant_collection = db['plants']
-
-plant_care_rules_collection = db['plant_care_rules']
-
- #set new reminder
-reminders_collection = db['reminders']
-
-care_guide_collection = db['care_guide_data']
+# ---------- Collections ----------
+users_collection = db["users"]
+plant_collection = db["plants"]
+plant_care_rules_collection = db["plant_care_rules"]
+reminders_collection = db["reminders"]
+care_guide_collection = db["care_guide_data"]
 
 
 def serialize_plant_doc(plant):
