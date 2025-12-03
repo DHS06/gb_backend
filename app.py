@@ -297,6 +297,7 @@ def search_plants():
             "error": "Server error occurred during search",
             "details": str(e)
         }), 500
+
     
 
 #my garden screen
