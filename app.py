@@ -297,7 +297,6 @@ def search_plants():
             "error": "Server error occurred during search",
             "details": str(e)
         }), 500
-
     
 
 #my garden screen
@@ -374,6 +373,8 @@ def update_plant(plant_id):
         
 
         plant_type = request.form.get('plantType')
+        print("⬅️ Received plantType from request:", plant_type)
+
         last_watered_date_str = request.form.get('lastWateredDate')
         last_fertilized_date_str = request.form.get('lastFertilizedDate')
         last_rePotted_date_str = request.form.get('lastRepottedDate')
@@ -384,7 +385,9 @@ def update_plant(plant_id):
             return jsonify({"status": "error", "message": "Missing required fields (plantName, plantType, lastWateredDate)"}), 400
 
         
-        rules = plant_care_rules_collection.find_one({"plantType": plant_type})
+        rules = plant_care_rules_collection.find_one({
+        "plantType": {"$regex": f"^{plant_type.strip()}$", "$options": "i"} 
+        })
         if not rules:
             return jsonify({"status": "error", "message": f"Care rules for plant type '{plant_type}' not found."}), 404
 
@@ -659,3 +662,80 @@ def get_care_guide_details(guide_id):
     except Exception as e:
         print(f"Error in get_care_guide_details: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
+    
+@app.route('/care_guide/add', methods=['POST'])
+def add_care_guide():
+    """Add a new plant care guide to the community database"""
+    try:
+        # Get form data
+        plant_name = request.form.get('plant_name')
+        scientific_name = request.form.get('scientific_name', 'N/A')
+        watering_schedule = request.form.get('watering_schedule')
+        sunlight_needs = request.form.get('sunlight_needs')
+        soil_type = request.form.get('soil_type')
+        fertilizer_tips = request.form.get('fertilizer_tips')
+
+        # Validate required fields
+        if not all([plant_name, watering_schedule, sunlight_needs, soil_type, fertilizer_tips]):
+            return jsonify({
+                "status": "error", 
+                "message": "Missing required fields"
+            }), 400
+
+        # Check if plant already exists in care guide
+        existing_plant = care_guide_collection.find_one({
+            "plant_name": {"$regex": f"^{plant_name.strip()}$", "$options": "i"}
+        })
+        
+        if existing_plant:
+            return jsonify({
+                "status": "error",
+                "message": "This plant already exists in our database"
+            }), 409
+
+        # Handle image upload
+        image_url = ''
+        if 'image' in request.files:
+            file = request.files['image']
+            if file.filename != '':
+                try:
+                    upload_result = cloudinary.uploader.upload(file)
+                    image_url = upload_result.get('secure_url')
+                except Exception as upload_error:
+                    print(f"Image upload error: {upload_error}")
+                    pass
+
+        # Create care guide document
+        care_guide_data = {
+            "plant_name": plant_name.strip(),
+            "scientific_name": scientific_name.strip() if scientific_name else 'N/A',
+            "image_url": image_url,
+            "watering_schedule": watering_schedule.strip(),
+            "sunlight_needs": sunlight_needs.strip(),
+            "soil_type": soil_type.strip(),
+            "fertilizer_tips": fertilizer_tips.strip(),
+            "created_at": datetime.utcnow(),
+            "contributed_by": "community"
+        }
+
+        # Insert into database
+        result = care_guide_collection.insert_one(care_guide_data)
+        care_guide_data["_id"] = str(result.inserted_id)
+        
+        return jsonify({
+            "status": "success",
+            "message": "Plant care guide added successfully!",
+            "plant": care_guide_data
+        }), 201
+
+    except Exception as e:
+        print(f"Error in add_care_guide: {e}")
+        return jsonify({
+            "status": "error", 
+            "message": "An internal server error occurred",
+            "details": str(e)
+        }), 500
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
