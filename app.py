@@ -140,10 +140,8 @@ def add_plant():
         last_fertilized_date_str = request.form.get('lastFertilizedDate')
         last_rePotted_date_str = request.form.get('lastRepottedDate')
 
-        #
-        care_guide_id = None  # Default to None
+        care_guide_id = None
         if plant_name:
-            # Use rege
             care_guide_document = care_guide_collection.find_one({
                 "plant_name": {"$regex": f"^{plant_name.strip()}$", "$options": "i"}
             })
@@ -151,11 +149,10 @@ def add_plant():
             if care_guide_document:
                 care_guide_id = care_guide_document['_id']
         
+        if not all([firebase_uid, plant_name, plant_type, last_watered_date_str,
+                    last_fertilized_date_str, last_rePotted_date_str]):
+            return jsonify({"status": "error", "message": "Missing required fields"}), 400
 
-        if not all([firebase_uid, plant_name, plant_type, last_watered_date_str,last_fertilized_date_str,last_rePotted_date_str]):
-            return jsonify({"status": "error", "message": "Missing required fields (uid, plantName, plantType, lastWateredDate)"}), 400
-
-        
         full_image_url = None
         if 'plantImage' in request.files:
             file = request.files['plantImage']
@@ -163,21 +160,15 @@ def add_plant():
                 upload_result = cloudinary.uploader.upload(file)
                 full_image_url = upload_result.get('secure_url')
 
-       
-        
-        
         rules = plant_care_rules_collection.find_one({"plantType": plant_type}) 
 
         if not rules:
             return jsonify({"status": "error", "message": f"Care rules for plant type '{plant_type}' not found."}), 404
 
-        
         watering_freq_days = rules.get('wateringFrequencyDays', 7)
         fertilizing_freq_days = rules.get('fertilizingFrequencyDays', 30) 
         repotting_freq_months = rules.get('repottingFrequencyMonths', 12) 
 
-        
-        
         last_watered_date_obj = datetime.fromisoformat(last_watered_date_str.replace('Z', '+00:00')) 
         last_fertilized_date_obj = datetime.fromisoformat(last_fertilized_date_str.replace('Z', '+00:00'))
         last_rePotted_date_obj = datetime.fromisoformat(last_rePotted_date_str.replace('Z', '+00:00'))
@@ -191,30 +182,32 @@ def add_plant():
         next_fertilizing_date = last_fertilized_date_obj + timedelta(days=fertilizing_freq_days)
         next_repotting_date = last_rePotted_date_obj + relativedelta(months=repotting_freq_months)
 
-        #  Create the new plant document 
+        # ✅ ONLY CHANGE IS HERE
         plant_data = {
             "uid": firebase_uid,
             "plantName": plant_name,
             "plantType": plant_type,
-            "dateAcquired": date_acquired_obj, 
+            "dateAcquired": date_acquired_obj,
             "soilType": request.form.get('soilType'),
             "potType": request.form.get('potType'),
             "potSize": request.form.get('potSize'),
             "careNotes": request.form.get('careNotes'),
             "photo_url": full_image_url,
-            
-           
-            "lastWateredDate": last_watered_date_obj, 
+
+            "lastWateredDate": last_watered_date_obj,
             "lastFertilizedDate": last_fertilized_date_obj,
             "lastRepottedDate": last_rePotted_date_obj,
             "nextWateringDate": next_watering_date,
             "nextFertilizingDate": next_fertilizing_date,
             "nextRepottingDate": next_repotting_date,
-            
-            "care_guide_id": care_guide_id
+
+            "care_guide_id": care_guide_id,
+
+            # 🔹 NEW FIELDS (AUTO ADDED)
+            "isArchived": False,
+            "archivedAt": None
         }
 
-        
         result = plant_collection.insert_one(plant_data)
         
         plant_data["_id"] = result.inserted_id
@@ -223,12 +216,13 @@ def add_plant():
         return jsonify({
             "status": "success",
             "message": "Plant added successfully!",
-            "plant": serialized_plant 
+            "plant": serialized_plant
         }), 201
 
     except Exception as e:
         print(f"An error occurred: {e}")
         return jsonify({"status": "error", "message": "An internal server error occurred"}), 500
+
     
 
 #set new reminder
