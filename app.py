@@ -330,23 +330,31 @@ def get_plant_details(plant_id):
     
 @app.route("/plant/delete/<plant_id>", methods=["DELETE"])
 def delete_plant(plant_id):
-     try:
-    
-        result = plant_collection.delete_one({"_id": ObjectId(plant_id)})
+    try:
+        result = plant_collection.update_one(
+            {"_id": ObjectId(plant_id)},
+            {"$set": {"isArchived": True}}
+        )
 
-        if result.deleted_count == 1:
-            
-            return jsonify({"status": "success", "message": "Plant deleted successfully"}), 200
+        if result.matched_count == 1:
+            return jsonify({
+                "status": "success",
+                "message": "Plant archived successfully"
+            }), 200
         else:
-           
-            return jsonify({"status": "error", "message": "Plant not found"}), 404
+            return jsonify({
+                "status": "error",
+                "message": "Plant not found"
+            }), 404
 
-     except Exception as e:
+    except Exception as e:
         print(f"An error occurred: {e}")
-        return jsonify({"status": "error", "message": "An internal server error occurred"}), 500
+        return jsonify({
+            "status": "error",
+            "message": "An internal server error occurred"
+        }), 500
+
      
-
-
 
 @app.route("/plant/update/<plant_id>", methods=["POST"])
 def update_plant(plant_id):
