@@ -223,7 +223,36 @@ def add_plant():
         print(f"An error occurred: {e}")
         return jsonify({"status": "error", "message": "An internal server error occurred"}), 500
 
-    
+ @app.route("/plants/archived/<uid>", methods=["GET"])
+def get_archived_plants(uid):
+    try:
+        plants = plant_collection.find({
+            "uid": uid,
+            "isArchived": True
+        })
+
+        archived = [serialize_plant_doc(p) for p in plants]
+        return jsonify(archived), 200
+
+    except Exception as e:
+        return jsonify({"error": "Server error"}), 500
+
+
+@app.route("/plant/restore/<plant_id>", methods=["POST"])
+def restore_plant(plant_id):
+    try:
+        result = plant_collection.update_one(
+            {"_id": ObjectId(plant_id)},
+            {"$set": {"isArchived": False}}
+        )
+
+        if result.matched_count == 1:
+            return jsonify({"status": "success", "message": "Plant restored"}), 200
+        else:
+            return jsonify({"status": "error", "message": "Plant not found"}), 404
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": "Server error"}), 500   
 
 #set new reminder
 @app.route('/reminders/add', methods=['POST'])
