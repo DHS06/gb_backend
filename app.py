@@ -223,6 +223,44 @@ def add_plant():
         print(f"An error occurred: {e}")
         return jsonify({"status": "error", "message": "An internal server error occurred"}), 500
 
+@app.route("/plant/archive/<plant_id>", methods=["POST"])
+def archive_plant(plant_id):
+    try:
+        result = plant_collection.update_one(
+            {"_id": ObjectId(plant_id)},
+            {
+                "$set": {
+                    "isArchived": True,
+                    "archivedAt": datetime.utcnow()
+                }
+            }
+        )
+
+        if result.matched_count == 1:
+            # 🔕 Disable reminders
+            reminders_collection.update_many(
+                {"plant_id": ObjectId(plant_id)},
+                {"$set": {"isActive": False}}
+            )
+
+            return jsonify({
+                "status": "success",
+                "message": "Plant archived successfully"
+            }), 200
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Plant not found"
+            }), 404
+
+    except Exception as e:
+        print(e)
+        return jsonify({
+            "status": "error",
+            "message": "Internal server error"
+        }), 500
+
+
 @app.route("/plants/archived/<uid>", methods=["GET"])
 def get_archived_plants(uid):
     try:
@@ -243,17 +281,38 @@ def restore_plant(plant_id):
     try:
         result = plant_collection.update_one(
             {"_id": ObjectId(plant_id)},
-            {"$set": {"isArchived": False}}
+            {
+                "$set": {
+                    "isArchived": False,
+                    "archivedAt": None
+                }
+            }
         )
 
         if result.matched_count == 1:
-            return jsonify({"status": "success", "message": "Plant restored"}), 200
+            # 🔔 Enable reminders again
+            reminders_collection.update_many(
+                {"plant_id": ObjectId(plant_id)},
+                {"$set": {"isActive": True}}
+            )
+
+            return jsonify({
+                "status": "success",
+                "message": "Plant restored"
+            }), 200
         else:
-            return jsonify({"status": "error", "message": "Plant not found"}), 404
+            return jsonify({
+                "status": "error",
+                "message": "Plant not found"
+            }), 404
 
     except Exception as e:
-        return jsonify({"status": "error", "message": "Server error"}), 500   
+        return jsonify({
+            "status": "error",
+            "message": "Server error"
+        }), 500
 
+    
 @app.route("/plant/permanent-delete/<plant_id>", methods=["DELETE"])
 def permanent_delete_plant(plant_id):
     try:
@@ -271,7 +330,13 @@ def permanent_delete_plant(plant_id):
                 "message": "Plant must be archived before permanent deletion"
             }), 400
 
+        # ❌ Delete plant
         plant_collection.delete_one({"_id": ObjectId(plant_id)})
+
+        # ❌ Delete reminders
+        reminders_collection.delete_many(
+            {"plant_id": ObjectId(plant_id)}
+        )
 
         return jsonify({
             "status": "success",
@@ -285,6 +350,7 @@ def permanent_delete_plant(plant_id):
             "message": "Internal server error"
         }), 500
 
+    
 
 #set new reminder
 @app.route('/reminders/add', methods=['POST'])
@@ -301,11 +367,14 @@ def add_reminder():
 
        
         reminder_data = {
-            "uid": firebase_uid,
-            "note": note,
-            "date": data.get('date'),
-            "time": data.get('time'),
+        "uid": firebase_uid,
+        "plant_id": ObjectId(data.get("plant_id")),
+        "note": note,
+        "date": data.get('date'),
+        "time": data.get('time'),
+        "isActive": True
         }
+
 
        
         reminders_collection.insert_one(reminder_data)
@@ -415,7 +484,10 @@ def delete_plant(plant_id):
             "message": "An internal server error occurred"
         }), 500
 
+
      
+
+
 
 @app.route("/plant/update/<plant_id>", methods=["POST"])
 def update_plant(plant_id):
