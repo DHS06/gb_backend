@@ -223,7 +223,7 @@ def add_plant():
         print(f"An error occurred: {e}")
         return jsonify({"status": "error", "message": "An internal server error occurred"}), 500
 
- @app.route("/plants/archived/<uid>", methods=["GET"])
+@app.route("/plants/archived/<uid>", methods=["GET"])
 def get_archived_plants(uid):
     try:
         plants = plant_collection.find({
