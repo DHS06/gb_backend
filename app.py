@@ -254,6 +254,38 @@ def restore_plant(plant_id):
     except Exception as e:
         return jsonify({"status": "error", "message": "Server error"}), 500   
 
+@app.route("/plant/permanent-delete/<plant_id>", methods=["DELETE"])
+def permanent_delete_plant(plant_id):
+    try:
+        plant = plant_collection.find_one({"_id": ObjectId(plant_id)})
+
+        if not plant:
+            return jsonify({
+                "status": "error",
+                "message": "Plant not found"
+            }), 404
+
+        if not plant.get("isArchived", False):
+            return jsonify({
+                "status": "error",
+                "message": "Plant must be archived before permanent deletion"
+            }), 400
+
+        plant_collection.delete_one({"_id": ObjectId(plant_id)})
+
+        return jsonify({
+            "status": "success",
+            "message": "Plant permanently deleted"
+        }), 200
+
+    except Exception as e:
+        print(e)
+        return jsonify({
+            "status": "error",
+            "message": "Internal server error"
+        }), 500
+
+
 #set new reminder
 @app.route('/reminders/add', methods=['POST'])
 def add_reminder():
