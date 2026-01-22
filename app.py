@@ -874,11 +874,11 @@ def add_care_guide():
 
 # -----------------------------------------------------------------------------------
 
-from flask import Blueprint, request, jsonify
+from flask import Flask, request, jsonify
 from pymongo import MongoClient
 import os
 
-care_plan_bp = Blueprint("care_plan", __name__)
+app = Flask(__name__)
 
 # MongoDB connection
 MONGO_URI = os.getenv("MONGO_URI")
@@ -889,7 +889,7 @@ db = client[DB_NAME]
 care_plan_collection = db["care_plans"]
 
 
-@care_plan_bp.route("/api/care-plan", methods=["POST"])
+@app.route("/api/care-plan", methods=["POST"])
 def get_care_plan():
     data = request.json
 
@@ -902,13 +902,12 @@ def get_care_plan():
             "message": "disease_name and confidence are required"
         }), 400
 
-    # Try to find disease-specific care plan
     care_plan = care_plan_collection.find_one(
         {"disease_name": disease_name},
         {"_id": 0}
     )
 
-    # If disease not found → fallback
+    # Fallback if disease not found
     if not care_plan:
         return jsonify({
             "success": True,
@@ -945,6 +944,11 @@ def get_care_plan():
         "confidence": confidence,
         "care_plan": care_plan
     }), 200
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
 
 
 if __name__ == "__main__":
