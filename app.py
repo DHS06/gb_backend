@@ -870,6 +870,81 @@ def add_care_guide():
             "message": "An internal server error occurred",
             "details": str(e)
         }), 500
+    
+
+# -----------------------------------------------------------------------------------
+
+from flask import Blueprint, request, jsonify
+from pymongo import MongoClient
+import os
+
+care_plan_bp = Blueprint("care_plan", __name__)
+
+# MongoDB connection
+MONGO_URI = os.getenv("MONGO_URI")
+DB_NAME = os.getenv("MONGO_DB_NAME")
+
+client = MongoClient(MONGO_URI)
+db = client[DB_NAME]
+care_plan_collection = db["care_plans"]
+
+
+@care_plan_bp.route("/api/care-plan", methods=["POST"])
+def get_care_plan():
+    data = request.json
+
+    disease_name = data.get("disease_name")
+    confidence = data.get("confidence")
+
+    if not disease_name or not confidence:
+        return jsonify({
+            "success": False,
+            "message": "disease_name and confidence are required"
+        }), 400
+
+    # Try to find disease-specific care plan
+    care_plan = care_plan_collection.find_one(
+        {"disease_name": disease_name},
+        {"_id": 0}
+    )
+
+    # If disease not found → fallback
+    if not care_plan:
+        return jsonify({
+            "success": True,
+            "confidence": "low",
+            "care_plan": {
+                "what_happening": "We could not confidently identify the disease.",
+                "immediate_actions": [
+                    "Isolate the plant",
+                    "Avoid overwatering",
+                    "Ensure good air circulation"
+                ],
+                "next_7_days": [
+                    "Monitor the plant daily",
+                    "Maintain proper sunlight",
+                    "Check for symptom changes"
+                ],
+                "avoid": [
+                    "Random chemical use",
+                    "Overwatering"
+                ],
+                "prevention": [
+                    "Regular inspection",
+                    "Clean gardening tools"
+                ],
+                "consult_expert": [
+                    "If condition worsens",
+                    "If plant shows severe damage"
+                ]
+            }
+        }), 200
+
+    return jsonify({
+        "success": True,
+        "confidence": confidence,
+        "care_plan": care_plan
+    }), 200
 
 
 if __name__ == "__main__":
