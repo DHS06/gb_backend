@@ -427,18 +427,23 @@ def search_plants():
 @app.route("/garden/<uid>", methods=["GET"])
 def get_garden(uid):
     try:
-        plants_cursor = list(plant_collection.find({"uid": uid}))
+        plants_cursor = list(
+            plant_collection.find({
+                "uid": uid,
+                "isArchived": False
+            })
+        )
 
-        
-        serialized_plants = []
-        for plant in plants_cursor:
-            serialized_plants.append(serialize_plant_doc(plant))
-      
-        
-        return jsonify(serialized_plants)
+        serialized_plants = [
+            serialize_plant_doc(p) for p in plants_cursor
+        ]
+
+        return jsonify(serialized_plants), 200
+
     except Exception as e:
         print(f"Error in get_garden: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Server error"}), 500
+
     
 
 @app.route("/plant/<plant_id>", methods=["GET"])
@@ -907,47 +912,57 @@ def get_care_plan():
         {"_id": 0}
     )
 
-    # Fallback if disease not found
-    if not care_plan:
-        return jsonify({
-            "success": True,
-            "confidence": "low",
-            "care_plan": {
-                "what_happening": "We could not confidently identify the disease.",
-                "immediate_actions": [
-                    "Isolate the plant",
-                    "Avoid overwatering",
-                    "Ensure good air circulation"
-                ],
-                "next_7_days": [
-                    "Monitor the plant daily",
-                    "Maintain proper sunlight",
-                    "Check for symptom changes"
-                ],
-                "avoid": [
-                    "Random chemical use",
-                    "Overwatering"
-                ],
-                "prevention": [
-                    "Regular inspection",
-                    "Clean gardening tools"
-                ],
-                "consult_expert": [
-                    "If condition worsens",
-                    "If plant shows severe damage"
-                ]
-            }
-        }), 200
-
-    return jsonify({
+    response = {
         "success": True,
-        "confidence": confidence,
-        "care_plan": care_plan
-    }), 200
+        "confidence": confidence
+    }
 
+    # HIGH confidence
+    if confidence == "high" and care_plan:
+        response["care_plan"] = care_plan
 
-if __name__ == "__main__":
-    app.run(debug=True)
+    # MEDIUM confidence
+    elif confidence == "medium" and care_plan:
+        response["note"] = (
+            "This diagnosis is based on image analysis and may not be fully accurate. "
+            "Please monitor your plant closely."
+        )
+        response["care_plan"] = care_plan
+
+    # LOW confidence OR disease not found
+    else:
+        response["note"] = (
+            "We could not confidently identify the disease. "
+            "Below are general care steps to keep your plant safe."
+        )
+        response["care_plan"] = {
+            "what_happening": "Possible plant stress or early-stage disease.",
+            "immediate_actions": [
+                "Isolate the plant",
+                "Avoid overwatering",
+                "Ensure proper sunlight"
+            ],
+            "next_7_days": [
+                "Observe symptoms daily",
+                "Maintain airflow",
+                "Check soil moisture"
+            ],
+            "avoid": [
+                "Random chemical use",
+                "Overwatering"
+            ],
+            "prevention": [
+                "Regular inspection",
+                "Clean gardening tools"
+            ],
+            "consult_expert": [
+                "If symptoms worsen",
+                "If plant shows severe damage"
+            ]
+        }
+
+    return jsonify(response), 200
+
 
 
 
