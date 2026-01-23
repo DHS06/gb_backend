@@ -430,7 +430,10 @@ def get_garden(uid):
         plants_cursor = list(
             plant_collection.find({
                 "uid": uid,
-                "isArchived": False
+                "$or": [
+                    {"isArchived": False},
+                    {"isArchived": {"$exists": False}}
+                ]
             })
         )
 
@@ -443,6 +446,7 @@ def get_garden(uid):
     except Exception as e:
         print(f"Error in get_garden: {e}")
         return jsonify({"error": "Server error"}), 500
+
 
     
 
@@ -608,22 +612,25 @@ def update_plant(plant_id):
 @app.route("/reminders/<uid>", methods=["GET"])
 def get_reminders(uid):
     try:
-        #
-        cursor = reminders_collection.find({"uid": uid}).sort("date", -1)
-        
-        reminders_list = []
-        for reminder in cursor:
-            reminders_list.append({
-                "_id": str(reminder["_id"]),
-                "note": reminder.get("note", ""),
-                "date": reminder.get("date", ""),
-                "time": reminder.get("time", ""),
-            })
-            
-        return jsonify(reminders_list), 200
+        reminders = reminders_collection.find({
+            "uid": uid,
+            "$or": [
+                {"isActive": True},
+                {"isActive": {"$exists": False}}
+            ]
+        })
+
+        result = []
+        for r in reminders:
+            r["_id"] = str(r["_id"])
+            result.append(r)
+
+        return jsonify(result), 200
 
     except Exception as e:
-        return jsonify({"error": "Server error", "details": str(e)}), 500
+        print(e)
+        return jsonify({"error": "Server error"}), 500
+
     
 @app.route('/users/update_profile_pic', methods=['POST'])
 def update_profile_pic():
