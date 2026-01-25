@@ -764,81 +764,25 @@ care_plan_collection = db["care_plans"]
 
 @app.route("/api/care-plan", methods=["POST"])
 def get_care_plan():
-    data = request.json
+    data = request.json or {}
 
     disease_name = data.get("disease_name")
     confidence = data.get("confidence")
 
-    if not disease_name or not confidence:
-        return jsonify({
-            "success": False,
-            "message": "disease_name and confidence are required"
-        }), 400
-
-    # care_plan = care_plan_collection.find_one(
-#     {"disease_name": disease_name},
-#     {"_id": 0}
-# )
     care_plan = {
         "immediate_actions": [
-        "Dummy action 1",
-        "Dummy action 2"
-    ]
-}
-
+            "Dummy action 1",
+            "Dummy action 2"
+        ]
+    }
 
     response = {
         "success": True,
-        "confidence": confidence
+        "confidence": confidence,
+        "care_plan": care_plan
     }
 
-    # HIGH confidence
-    if confidence == "high" and care_plan:
-        response["care_plan"] = care_plan
-
-    # MEDIUM confidence
-    elif confidence == "medium" and care_plan:
-        response["note"] = (
-            "This diagnosis is based on image analysis and may not be fully accurate. "
-            "Please monitor your plant closely."
-        )
-        response["care_plan"] = care_plan
-
-    # LOW confidence OR disease not found
-    else:
-        response["note"] = (
-            "We could not confidently identify the disease. "
-            "Below are general care steps to keep your plant safe."
-        )
-        response["care_plan"] = {
-            "what_happening": "Possible plant stress or early-stage disease.",
-            "immediate_actions": [
-                "Isolate the plant",
-                "Avoid overwatering",
-                "Ensure proper sunlight"
-            ],
-            "next_7_days": [
-                "Observe symptoms daily",
-                "Maintain airflow",
-                "Check soil moisture"
-            ],
-            "avoid": [
-                "Random chemical use",
-                "Overwatering"
-            ],
-            "prevention": [
-                "Regular inspection",
-                "Clean gardening tools"
-            ],
-            "consult_expert": [
-                "If symptoms worsen",
-                "If plant shows severe damage"
-            ]
-        }
-
     return jsonify(response), 200
-
-
 
 
 if __name__ == "__main__":
