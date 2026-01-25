@@ -775,10 +775,17 @@ def get_care_plan():
             "message": "disease_name and confidence are required"
         }), 400
 
-    care_plan = care_plan_collection.find_one(
-        {"disease_name": disease_name},
-        {"_id": 0}
-    )
+    # care_plan = care_plan_collection.find_one(
+#     {"disease_name": disease_name},
+#     {"_id": 0}
+# )
+    care_plan = {
+        "immediate_actions": [
+        "Dummy action 1",
+        "Dummy action 2"
+    ]
+}
+
 
     response = {
         "success": True,
