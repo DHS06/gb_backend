@@ -759,18 +759,6 @@ def add_care_guide():
 
 # -----------------------------------------------------------------------------------
 
-from flask import Flask, request, jsonify
-from pymongo import MongoClient
-import os
-
-app = Flask(__name__)
-
-# MongoDB connection
-MONGO_URI = os.getenv("MONGO_URI")
-DB_NAME = os.getenv("MONGO_DB_NAME")
-
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
 care_plan_collection = db["care_plans"]
 
 
