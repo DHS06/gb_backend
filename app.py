@@ -771,18 +771,30 @@ def get_care_plan():
 
     care_plan = {
         "immediate_actions": [
-            "Dummy action 1",
-            "Dummy action 2"
+            "Remove infected leaves",
+            "Avoid watering on leaves",
+            "Ensure proper air circulation"
+        ],
+        "next_7_days": [
+            "Monitor plant daily",
+            "Water only soil",
+            "Keep plant in indirect sunlight"
+        ],
+        "avoid": [
+            "Overwatering",
+            "Chemical spraying without guidance"
         ]
     }
 
     response = {
         "success": True,
         "confidence": confidence,
+        "note": "This care plan is generated based on detected symptoms.",
         "care_plan": care_plan
     }
 
     return jsonify(response), 200
+
 
 
 if __name__ == "__main__":
