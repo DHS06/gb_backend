@@ -297,7 +297,7 @@ def search_plants():
     
 
 #my garden screen
-@app.route("/garden/<uid>", methods=["GET"])
+'''@app.route("/garden/<uid>", methods=["GET"])
 def get_garden(uid):
     try:
         plants_cursor = list(
@@ -318,7 +318,7 @@ def get_garden(uid):
 
     except Exception as e:
         print(f"Error in get_garden: {e}")
-        return jsonify({"error": "Server error"}), 500
+        return jsonify({"error": "Server error"}), 500'''
     
 #mygarden v2
 
