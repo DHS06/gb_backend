@@ -319,7 +319,160 @@ def get_garden(uid):
     except Exception as e:
         print(f"Error in get_garden: {e}")
         return jsonify({"error": "Server error"}), 500
+    
+#mygarden v2
 
+@app.route("/garden_v2/view/<uid>", methods=["GET"])
+def get_garden(uid):
+    try:
+        
+        plants_cursor = list(plant_collection.find({
+            "user_id": uid, 
+            "isArchived": {"$ne": True}
+        }))
+
+        
+        serialized_plants = []
+        for plant in plants_cursor:
+            doc = serialize_plant_doc(plant)
+            if 'plantName' in doc:
+                doc['pName'] = doc.pop('plantName')
+            
+            serialized_plants.append(doc)
+            if not serialized_plants:
+                return jsonify({"status": "empty", "data": []})
+        
+            return jsonify(serialized_plants)
+            
+      
+        
+        return jsonify(serialized_plants)
+    except Exception as e:
+        print(f"Error in get_garden: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+# archieve plant
+
+@app.route("/garden/item/archive/<plant_id>", methods=["POST"])
+def archive_plant(plant_id):
+    try:
+        data = request.get_json()
+        reason = data.get('explanation', 'System Default: Removed')
+
+        result = plant_collection.update_one(
+            {"_id": ObjectId(plant_id)},
+            {"$set": {
+                "archived_status": True,
+                "archive_explanation": reason,
+                "archivedAt": datetime.utcnow()
+            }}
+        )
+
+        if result.matched_count == 1:
+            return jsonify({"status": "success", "message": "Plant moved to archive"}), 200
+        else:
+            return jsonify({"status": "error", "message": "Plant not found"}), 404
+
+    except Exception as e:
+        print(f"Archive Error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+#---------------
+
+@app.route("/garden/archive_list/user/<uid>", methods=["GET"])
+def get_archived_plants(uid):
+    try:
+        # Fetch only archived plants for this user
+        plants_cursor = list(plant_collection.find({
+            "user_id": uid, 
+            "isArchived": True
+        }))
+
+        serialized_plants = []
+        for p in plants_cursor:
+            doc = serialize_plant_doc(p)
+            if 'archivedAt' in doc:
+                doc['date_removed'] = doc.pop('archivedAt') # Flutter will crash on null 'archivedAt'
+            serialized_plants.append(doc)
+
+            if not serialized_plants:
+              return jsonify({"message": "No history found"}), 404
+        return jsonify(serialized_plants), 200
+        
+        
+    except Exception as e:
+        return jsonify({"error": "Internal Registry Error"}), 500
+    
+#------
+
+@app.route("/users/total_stats/<uid>", methods=["GET"])
+def get_user_stats(uid):
+    try:
+        total_plants = plant_collection.count_documents({"userid": uid})
+        
+        return jsonify({"total_plants": total_plants}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+#----------------
+
+@app.route('/care_guide/add_new', methods=['POST'])
+def add_care_guide():
+    
+    try:
+        
+        plant_name = request.form.get('plantName')
+        sci_name = request.form.get('sci_name', 'N/A')
+        watering = request.form.get('watering_schedule')
+        sunlight = request.form.get('sunlight_needs')
+        soil = request.form.get('soil_type')
+        fert = request.form.get('fertilizer_tips')
+        
+
+        if not all([plant_name, watering, sunlight, soil, fert]):
+            return jsonify({"status": "error", "message": "Missing required fields"}), 400
+
+        
+        existing = care_guide_collection.find_one({
+            "plant_name": {"$regex": f"^{plant_name.strip()}$", "$options": "i"}
+        })
+        if existing:
+            return jsonify({"status": "error", "message": "Duplicate data"}), 409
+
+        
+        image_url = ''
+        if 'image' in request.files:
+            file = request.files['image_file']
+            if file.filename != '':
+                upload_result = cloudinary.uploader.upload(file)
+                image_url = upload_result.get('secure_url')
+
+        
+        new_guide = {
+            "p_name": plant_name.strip(),
+            "scientific_name": sci_name.strip(),
+            "image_url": image_url,
+            "watering_schedule": watering,
+            "sunlight_needs": sunlight,
+            "soil_type": soil,
+            "fertilizer_tips": fert,
+            "created_at": datetime.utcnow(),
+            
+        }
+
+        result = care_guide_collection.insert_one(new_guide)
+        new_guide["_id"] = str(result.inserted_id)
+        
+        return jsonify({
+            "status": "success", 
+            "message": "Guide added!",
+            "plant": new_guide
+        }), 201
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({"status": "error", "message": "An internal error occurred"}), 500
 
     
 
@@ -794,6 +947,8 @@ def get_care_plan():
     }
 
     return jsonify(response), 200
+
+
 
 
 
