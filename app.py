@@ -836,7 +836,7 @@ def get_care_guide_details(guide_id):
         print(f"Error in get_care_guide_details: {e}")
         return jsonify({"error": "An internal server error occurred"}), 500
     
-@app.route('/care_guide/add', methods=['POST'])
+'''@app.route('/care_guide/add', methods=['POST'])
 def add_care_guide():
     """Add a new plant care guide to the community database"""
     try:
@@ -908,7 +908,7 @@ def add_care_guide():
             "message": "An internal server error occurred",
             "details": str(e)
         }), 500
-    
+    '''
 
 # -----------------------------------------------------------------------------------
 
